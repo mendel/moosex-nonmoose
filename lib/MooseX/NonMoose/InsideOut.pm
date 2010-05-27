@@ -37,8 +37,26 @@ my ($import, $unimport, $init_meta) = Moose::Exporter->build_import_methods(
     metaclass_roles          => ['MooseX::NonMoose::Meta::Role::Class'],
     constructor_class_roles  => ['MooseX::NonMoose::Meta::Role::Constructor'],
     instance_metaclass_roles => ['MooseX::InsideOut::Role::Meta::Instance'],
-    install                  => [qw(import unimport)],
+    install                  => [qw(unimport)],
 );
+
+#FIXME code duplicated from MooseX::NonMoose -> extract to a role
+sub import {
+    my $class = shift;
+
+    my $constructor_idx = first_index { $_ eq '-constructor' } @_;
+    my $constructor_name =
+      $constructor_idx >= 0
+        ? ( splice @_, $constructor_idx, 2 )[1]
+        : 'new';
+
+    my $config = ref $_[0] eq 'HASH' ? shift : {};
+    my $into_class = $config->{into} || caller($config->{into_level} || 0);
+    $config->{into_level}++;
+    $class->$import($config, @_);
+
+    $into_class->meta->constructor_name($constructor_name);
+}
 
 sub init_meta {
     my $package = shift;

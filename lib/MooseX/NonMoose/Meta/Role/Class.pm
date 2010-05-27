@@ -34,6 +34,12 @@ L<MooseX::NonMoose> for more details.
 
 =cut
 
+has constructor_name => (
+    is        => 'rw',
+    isa       => 'Str',
+    default   => 'new',
+);
+
 has has_nonmoose_constructor => (
     is      => 'rw',
     isa     => 'Bool',
@@ -50,6 +56,9 @@ sub _determine_constructor_options {
     my $self = shift;
     my @options = @_;
 
+    unshift @options, (constructor_name => $self->constructor_name)
+        if $self->constructor_name ne 'new';
+
     # if we're using just the metaclass trait, but not the constructor trait,
     # then suppress the warning about not inlining a constructor
     my $cc_meta = Class::MOP::class_of($self->constructor_class);
@@ -62,9 +71,8 @@ sub _determine_constructor_options {
     # XXX: this is a fairly big hack, but it should cover most of the cases
     # that actually show up in practice... it would be nice to do this properly
     # though
-    # XXX: get constructor name from the constructor metaclass?
     return @options
-        if $self->get_method('new')->isa('Class::MOP::Method::Wrapped');
+        if $self->get_method($self->constructor_name)->isa('Class::MOP::Method::Wrapped');
 
     # do nothing if we explicitly ask for the constructor to not be inlined
     my %options = @options;
@@ -104,13 +112,12 @@ sub _check_superclass_constructor {
 
     # if the current class defined a custom new method (since subs happen at
     # BEGIN time), don't try to override it
-    return if $self->has_method('new');
+    return if $self->has_method($self->constructor_name);
 
     # we need to get the non-moose constructor from the superclass
     # of the class where this method actually exists, regardless of what class
     # we're calling it on
-    # XXX: get constructor name from the constructor metaclass?
-    my $super_new = $self->find_next_method_by_name('new');
+    my $super_new = $self->find_next_method_by_name($self->constructor_name);
 
     # if we're trying to extend a (non-immutable) moose class, just do nothing
     return if $super_new->package_name eq 'Moose::Object';
@@ -131,7 +138,7 @@ sub _check_superclass_constructor {
                       $super_new->associated_metaclass->_inlined_methods;
     }
 
-    $self->add_method(new => sub {
+    $self->add_method($self->constructor_name => sub {
         my $class = shift;
 
         my $params = $class->BUILDARGS(@_);

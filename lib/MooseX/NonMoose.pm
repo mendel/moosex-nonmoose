@@ -1,5 +1,6 @@
 package MooseX::NonMoose;
 use Moose::Exporter;
+use List::MoreUtils qw(first_index);
 # ABSTRACT: easy subclassing of non-Moose classes
 
 =head1 SYNOPSIS
@@ -62,13 +63,34 @@ return a list of arguments to pass to the superclass constructor. This allows
 C<MooseX::NonMoose> to support superclasses whose constructors would get
 confused by the extra arguments that Moose requires (for attributes, etc.)
 
+If your superclass constructor is not called C<new> you can tell
+L<MooseX::NonMoose> by adding C<< -constructor => 'your_constructor_name' >> to
+the import list.
+
 =cut
 
 my ($import, $unimport, $init_meta) = Moose::Exporter->build_import_methods(
     metaclass_roles         => ['MooseX::NonMoose::Meta::Role::Class'],
     constructor_class_roles => ['MooseX::NonMoose::Meta::Role::Constructor'],
-    install                 => [qw(import unimport)],
+    install                 => [qw(unimport)],
 );
+
+sub import {
+    my $class = shift;
+
+    my $constructor_idx = first_index { $_ eq '-constructor' } @_;
+    my $constructor_name =
+      $constructor_idx >= 0
+        ? ( splice @_, $constructor_idx, 2 )[1]
+        : 'new';
+
+    my $config = ref $_[0] eq 'HASH' ? shift : {};
+    my $into_class = $config->{into} || caller($config->{into_level} || 0);
+    $config->{into_level}++;
+    $class->$import($config, @_);
+
+    $into_class->meta->constructor_name($constructor_name);
+}
 
 sub init_meta {
     my $package = shift;
@@ -81,8 +103,6 @@ sub init_meta {
 =head1 TODO
 
 =over 4
-
-=item * Allow for constructors with names other than C<new>.
 
 =back
 
@@ -102,10 +122,6 @@ and C<033-moosex-globref> tests bundled with this dist.
 C<MooseX::NonMoose> (i.e. using C<sub new { ... }>) currently doesn't work,
 although using method modifiers on the constructor should work identically to
 normal Moose classes.
-
-=item * C<MooseX::NonMoose> currently assumes in several places that the
-superclass constructor will be called C<new>. This may be made configurable
-in the future.
 
 =back
 
